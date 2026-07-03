@@ -141,7 +141,7 @@
   .card-btn .meta{font-family:var(--body);font-weight:500;font-size:.85rem;color:#6b5e58;display:block;margin-top:2px}
   .g1 .badge{background:#ff8a5c}.g2 .badge{background:#ffb02e}.g3 .badge{background:#4ec3a8}
   .g4 .badge{background:#5aa9e6}.g5 .badge{background:#a678e0}
-  .s-math .badge{background:#5aa9e6}.s-spell .badge{background:#e67ea6}.s-shapes .badge{background:#7bc47f}.s-listen .badge{background:#b08ae0}.s-puzzle .badge{background:#f0894a}
+  .s-math .badge{background:#5aa9e6}.s-spell .badge{background:#e67ea6}.s-shapes .badge{background:#7bc47f}.s-listen .badge{background:#b08ae0}.s-puzzle .badge{background:#f0894a}.s-write .badge{background:#5ac2c2}
   .d-easy .badge{background:#4ec36a}.d-med .badge{background:#ffb02e}.d-hard .badge{background:#ff5a5a}
 
   .backbtn{position:absolute;top:16px;left:16px;z-index:20;border:none;cursor:pointer;background:var(--card);
@@ -245,6 +245,12 @@
   .puz-head{display:flex;align-items:center;gap:12px;justify-content:center;font-family:var(--display);font-weight:700;font-size:1rem;}
   .puz-goal{width:50px;height:50px;flex:0 0 50px;background-size:cover;background-position:center;border-radius:8px;border:2px solid #e0c9a0;}
   .ov-craft .puz-goal.big{width:120px;height:120px;flex-basis:120px;border-radius:12px;margin:0 auto;}
+  .write-wrap{display:flex;flex-direction:column;align-items:center;gap:9px;padding:2px 0;}
+  .write-canvas{background:#fff;border-radius:12px;border:3px solid #ffd98a;touch-action:none;cursor:crosshair;box-shadow:inset 0 2px 6px rgba(0,0,0,.06);}
+  .write-btns{display:flex;gap:10px;}
+  .write-btns .key{padding:12px 22px;font-size:1.1rem;}
+  .write-head{font-family:var(--display);font-weight:800;font-size:1.3rem;}
+  .write-target{color:var(--honey-deep);font-size:1.9rem;}
   .shape-prompt{display:flex;flex-direction:column;align-items:center;gap:4px;}
   .shape-prompt svg{filter:drop-shadow(0 4px 3px rgba(0,0,0,.15))}
   .letters{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
@@ -404,6 +410,7 @@
         <button class="card-btn s-shapes" id="subjShapes"><span class="badge">🔷</span><span>Shapes<span class="meta">Name the shape · easy, medium or hard</span></span></button>
         <button class="card-btn s-listen" id="subjListen"><span class="badge">🎧</span><span>Listening<span class="meta">Listen & make a paper craft</span></span></button>
         <button class="card-btn s-puzzle" id="subjPuzzle"><span class="badge">🧩</span><span>Puzzle<span class="meta">Solve the picture under 1 minute</span></span></button>
+        <button class="card-btn s-write" id="subjWrite"><span class="badge">✏️</span><span>Writing<span class="meta">Trace and write the letters</span></span></button>
       </div>
     </div>
   </section>
@@ -464,6 +471,13 @@
       <div class="answer" id="answerRow"><div class="disp empty" id="ansDisp">–</div></div>
       <div class="keys num" id="keys"></div>
       <div class="puzzle-wrap" id="puzzleWrap" style="display:none"><div class="puzzle-board" id="puzzleBoard"></div></div>
+      <div class="write-wrap" id="writeWrap" style="display:none">
+        <canvas id="writeCanvas" class="write-canvas"></canvas>
+        <div class="write-btns">
+          <button class="key del" id="writeClear">⌫ Clear</button>
+          <button class="key go" id="writeCheck">Check ✓</button>
+        </div>
+      </div>
     </div>
 
     <div class="overlay" id="overlay">
@@ -654,7 +668,7 @@
     state={grade,diff,subject,correct:0,lives:MAX_LIVES,total:0,left:0,q:null,word:"",emoji:"",
       input:"",running:false,raf:null,last:0,ended:false,teaching:false,busy:false};
     if(subject==='puzzle'){ const cfg={easy:[3,18],medium:[3,42],hard:[4,64]}[diff]||[3,18]; state.puzN=cfg[0]; state.puzShuffle=cfg[1]; }
-    $("#hudLevel").textContent = "Grade "+grade+" · "+(subject==='spell'?"Spelling":subject==='shapes'?"Shapes":subject==='listen'?"Listening":subject==='puzzle'?"Puzzle":"Math");
+    $("#hudLevel").textContent = "Grade "+grade+" · "+(subject==='spell'?"Spelling":subject==='shapes'?"Shapes":subject==='listen'?"Listening":subject==='puzzle'?"Puzzle":subject==='write'?"Writing":"Math");
     $("#gameScreen").setAttribute("data-grade", grade);
     $("#girl").classList.remove("hit"); $("#girl").textContent="👧"; $("#girl").style.left=GIRL_POS+"%";
     $("#impact").classList.remove("show"); $("#impact").style.left=""; $("#paddle").style.display="none";
@@ -667,9 +681,13 @@
   function buildKeypad(){
     const keys=$("#keys"); let h="";
     const answerRow=$("#answerRow");
-    $("#puzzleWrap").style.display="none";
+    $("#puzzleWrap").style.display="none"; $("#writeWrap").style.display="none";
     if(state.subject==='puzzle'){
       answerRow.style.display="none"; keys.className="keys"; keys.innerHTML=""; buildPuzzle(); return;
+    }
+    if(state.subject==='write'){
+      answerRow.style.display="none"; keys.className="keys"; keys.innerHTML="";
+      $("#writeWrap").style.display="flex"; setupWriteCanvas(); return;
     }
     if(state.subject==='shapes' || state.subject==='listen'){
       answerRow.style.display="none"; keys.className="keys shapes"; keys.innerHTML=""; return;
@@ -699,7 +717,9 @@
   }
 
   function nextQuestion(){
-    if(state.subject==='listen'){
+    if(state.subject==='write'){
+      state.writeChar=pickLetter(state.diff); state.total=WRITE_TIME[state.diff];
+    } else if(state.subject==='listen'){
       const it=makeListen(state.diff); state.listenAns=it.answer; state.listenText=it.text; state.listenOpts=it.options;
       state.total=TIME[state.diff];
     } else if(state.subject==='shapes'){
@@ -721,7 +741,12 @@
 
   function renderPrompt(){
     const c=$("#qCard");
-    if(state.subject==='listen'){
+    if(state.subject==='write'){
+      c.classList.remove("spellcard");
+      c.innerHTML='<div class="write-head">✏️ Write this letter: <b class="write-target">'+state.writeChar+'</b></div>';
+      $("#hintLine").textContent="Trace it, then press Check!"; $("#hintLine").classList.remove("reveal");
+      drawGuide(); speak(state.writeChar);
+    } else if(state.subject==='listen'){
       c.classList.add("spellcard");
       c.innerHTML='<span class="spell-emoji">🎧</span><button class="hearbtn" data-hear="1">🔊 Play again</button>';
       $("#hintLine").textContent="Do what you hear!"; $("#hintLine").classList.remove("reveal");
@@ -809,6 +834,7 @@
     if(state.subject==='spell'){ spellWrong(); return; }
     if(state.subject==='shapes'){ shapeWrong(); return; }
     if(state.subject==='listen'){ listenWrong(); return; }
+    if(state.subject==='write'){ writeWrong(); return; }
     sBad(); state.lives--; updateHUD(); flashCard(false);
     state.left=Math.max(.4, state.left-state.total*0.25);
     state.input=""; renderInput();
@@ -885,6 +911,9 @@
       } else if(state.subject==='listen'){
         const h=$("#hintLine"); h.innerHTML='Listen: <b>'+state.listenText+'</b>'; h.classList.add("reveal"); speak(state.listenText);
         setTimeout(()=>{ if(!state||state.ended) return; h.classList.remove("reveal"); state.busy=false; nextQuestion(); },2000);
+      } else if(state.subject==='write'){
+        const h=$("#hintLine"); h.innerHTML='Trace the letter <b>'+state.writeChar+'</b>'; h.classList.add("reveal"); speak(state.writeChar);
+        setTimeout(()=>{ if(!state||state.ended) return; h.classList.remove("reveal"); state.busy=false; nextQuestion(); },1800);
       } else { state.busy=false; nextQuestion(); }
     },950);
   }
@@ -988,6 +1017,65 @@
     startTimer();
   }
 
+  /* ---- WRITING: trace the shown letter on the canvas ---- */
+  const WRITE_TIME={easy:20,medium:16,hard:12};
+  let wr=null, lastWrite="";
+  function pickLetter(diff){
+    const U="ABCDEFGHIJKLMNOPQRSTUVWXYZ", L="abcdefghijklmnopqrstuvwxyz"; let ch;
+    do{
+      if(diff==='easy') ch=U[rand(0,25)];
+      else if(diff==='medium') ch=L[rand(0,25)];
+      else ch=(Math.random()<0.5?U:L)[rand(0,25)];
+    }while(ch===lastWrite);
+    lastWrite=ch; return ch;
+  }
+  function setupWriteCanvas(){
+    const canvas=$("#writeCanvas");
+    const W=Math.max(220, Math.min(Math.floor(window.innerWidth*0.82), 320));
+    const H=Math.max(140, Math.min(Math.floor(window.innerHeight*0.30), 180));
+    canvas.width=W; canvas.height=H; canvas.style.width=W+"px"; canvas.style.height=H+"px";
+    const off=document.createElement("canvas"); off.width=W; off.height=H;
+    wr={canvas, ctx:canvas.getContext("2d",{willReadFrequently:true}), off,
+        octx:off.getContext("2d",{willReadFrequently:true}), W, H, drawing:false, lastP:null, mask:null, maskCount:1};
+  }
+  function drawGuide(){
+    if(!wr) return; const {ctx,octx,W,H}=wr; const fs=Math.floor(H*0.80);
+    ctx.clearRect(0,0,W,H);
+    ctx.save(); ctx.fillStyle="rgba(90,60,40,0.15)"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.font="bold "+fs+"px 'Baloo 2', system-ui, sans-serif";
+    ctx.fillText(state.writeChar, W/2, H/2+fs*0.02); ctx.restore();
+    octx.clearRect(0,0,W,H); octx.fillStyle="#000"; octx.textAlign="center"; octx.textBaseline="middle";
+    octx.font="bold "+fs+"px 'Baloo 2', system-ui, sans-serif";
+    octx.fillText(state.writeChar, W/2, H/2+fs*0.02);
+    const d=octx.getImageData(0,0,W,H).data, mask=new Uint8Array(W*H); let cnt=0;
+    for(let p=0,i=0;p<d.length;p+=4,i++){ if(d[p+3]>40){ mask[i]=1; cnt++; } }
+    wr.mask=mask; wr.maskCount=cnt||1;
+  }
+  function wpos(e){ const r=wr.canvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+  function writeDown(e){ if(!wr||!state||state.subject!=='write'||!state.running||state.ended||state.teaching) return;
+    wr.drawing=true; try{wr.canvas.setPointerCapture(e.pointerId);}catch(_){}
+    wr.lastP=wpos(e); e.preventDefault(); }
+  function writeMove(e){ if(!wr||!wr.drawing) return; const p=wpos(e), ctx=wr.ctx;
+    ctx.strokeStyle="#2b2b2b"; ctx.lineWidth=Math.max(10,wr.H*0.09); ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.beginPath(); ctx.moveTo(wr.lastP.x,wr.lastP.y); ctx.lineTo(p.x,p.y); ctx.stroke(); wr.lastP=p; e.preventDefault(); }
+  function writeUp(){ if(wr) wr.drawing=false; }
+  function checkWrite(){
+    if(!wr||!state||state.subject!=='write'||state.ended||!state.running||state.busy||state.teaching) return;
+    const dd=wr.ctx.getImageData(0,0,wr.W,wr.H).data;
+    let inside=0, totalInk=0;
+    for(let p=0,i=0;p<dd.length;p+=4,i++){ const r=dd[p],g=dd[p+1],b=dd[p+2];
+      if(r<120&&g<120&&b<120){ totalInk++; if(wr.mask[i]) inside++; } }
+    const coverage=inside/wr.maskCount, precision=totalInk?inside/totalInk:0;
+    const ok=(coverage>=0.42 && precision>=0.35 && totalInk>wr.maskCount*0.15);
+    answerResult(ok);
+  }
+  function writeWrong(){
+    sBad(); stopTimer(); state.teaching=true; flashCard(false);
+    const h=$("#hintLine"); h.innerHTML='Trace the letter <b>'+state.writeChar+'</b>'; h.classList.add("reveal");
+    speak(state.writeChar);
+    setTimeout(()=>{ if(!state||state.ended) return; state.teaching=false; h.classList.remove("reveal"); nextQuestion(); },1800);
+  }
+
   function flowerSVG(){
     const cx=60, cy=52, R=24, colors=["#ff5a5a","#5aa9e6"]; let petals="";
     for(let i=0;i<6;i++){
@@ -1016,6 +1104,7 @@
     $("#ovTitle").textContent = didWin?"You Won!":"Ouch — stung!";
     const winText = state.subject==='listen' ? "You listened carefully and made a red & blue paper flower!"
       : state.subject==='puzzle' ? "You solved the picture puzzle in time!"
+      : state.subject==='write' ? "You wrote all your letters — great handwriting!"
       : "You reached the rainbow safely.";
     $("#ovText").textContent = didWin?winText:"The bee caught up. Try again — you can do it!";
     $("#ovStat").textContent = state.subject==='puzzle' ? "" : "Score: "+state.correct+" / "+GOAL;
@@ -1040,9 +1129,10 @@
     spell:{easy:"Short, simple words + more time",med:"Longer everyday words",hard:"Tricky long words, less time"},
     shapes:{easy:"Basic shapes · 3 choices",med:"More shapes · 4 choices",hard:"Trickier shapes · 4 choices, less time"},
     listen:{easy:"Simple steps · 3 tools, more time",med:"All 4 tools",hard:"All 4 tools · faster"},
-    puzzle:{easy:"3×3 tiles · 60 seconds",med:"3×3 shuffled more · 60 seconds",hard:"4×4 tiles · 60 seconds"}
+    puzzle:{easy:"3×3 tiles · 60 seconds",med:"3×3 shuffled more · 60 seconds",hard:"4×4 tiles · 60 seconds"},
+    write:{easy:"Capital letters · more time",med:"Small letters",hard:"Mixed letters · faster"}
   };
-  const SUBJ_LABEL={math:" · Math",spell:" · Spelling",shapes:" · Shapes",listen:" · Listening",puzzle:" · Puzzle"};
+  const SUBJ_LABEL={math:" · Math",spell:" · Spelling",shapes:" · Shapes",listen:" · Listening",puzzle:" · Puzzle",write:" · Writing"};
   function openDiff(subject){
     chosenSubject=subject;
     const m=DIFF_META[subject]||DIFF_META.math;
@@ -1060,6 +1150,7 @@
   $("#subjShapes").addEventListener("click",()=>openDiff('shapes'));
   $("#subjListen").addEventListener("click",()=>openDiff('listen'));
   $("#subjPuzzle").addEventListener("click",()=>openDiff('puzzle'));
+  $("#subjWrite").addEventListener("click",()=>openDiff('write'));
   document.querySelectorAll("#diffScreen .card-btn").forEach(b=>b.addEventListener("click",()=>startGame(chosenGrade,b.dataset.diff,chosenSubject)));
   document.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>show(b.dataset.goto)));
 
@@ -1068,6 +1159,7 @@
     if(state.subject==='listen') speak(state.listenText);
     else if(state.subject==='spell') speak(state.word);
     else if(state.subject==='shapes') speak(state.shape);
+    else if(state.subject==='write') speak(state.writeChar);
   }
   $("#keys").addEventListener("click",e=>{
     const opt=e.target.closest(".shapeopt");
@@ -1076,9 +1168,13 @@
   });
   $("#qCard").addEventListener("click",e=>{ if(e.target.closest("[data-hear]")) replayPrompt(); });
   $("#puzzleBoard").addEventListener("click",e=>{ const t=e.target.closest(".ptile"); if(!t||!puz) return; const val=+t.dataset.val; const pos=puz.tiles.indexOf(val); puzzleClick(pos); });
+  (function(){ const cv=$("#writeCanvas"); if(cv){ cv.addEventListener("pointerdown",writeDown); cv.addEventListener("pointermove",writeMove); cv.addEventListener("pointerup",writeUp); cv.addEventListener("pointercancel",writeUp); } })();
+  $("#writeClear").addEventListener("click",()=>{ if(wr&&state&&state.subject==='write') drawGuide(); });
+  $("#writeCheck").addEventListener("click",checkWrite);
   window.addEventListener("keydown",e=>{
     if(!screens.gameScreen.classList.contains("active")||!state) return;
     if(state.subject==='puzzle') return;
+    if(state.subject==='write'){ if(e.key==='Enter'){e.preventDefault();checkWrite();} else if(e.key==='Backspace'){e.preventDefault(); if(wr) drawGuide();} return; }
     if(state.subject==='shapes' || state.subject==='listen'){
       if(e.key==='r'||e.key==='R'||e.key===' '){ e.preventDefault(); replayPrompt(); return; }
       const n=parseInt(e.key,10);
